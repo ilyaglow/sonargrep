@@ -1,6 +1,12 @@
 sonargrep
 ---------
 
+## Install
+
+```
+go install github.com/ilyaglow/sonargrep
+```
+
 ## Usage
 
 Grep IPs that contain wordpress it their body from `sonar.https` dataset without saving a 50GB file to the disk:
