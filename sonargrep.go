@@ -46,7 +46,7 @@ type Subject struct {
 }
 
 func main() {
-	gword := flag.String("grep", "", "word to grep")
+	gword := flag.String("w", "", "word to grep")
 	casesens := flag.Bool("i", true, "ignore case")
 	flag.Parse()
 
