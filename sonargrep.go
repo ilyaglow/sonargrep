@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
@@ -10,7 +11,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 	"sync"
 
 	"golang.org/x/text/language"
@@ -47,7 +47,7 @@ type Subject struct {
 
 func main() {
 	gword := flag.String("w", "", "word to grep")
-	casesens := flag.Bool("i", true, "ignore case")
+	casesens := flag.Bool("i", false, "ignore case")
 	flag.Parse()
 
 	g, err := gzip.NewReader(os.Stdin)
@@ -61,30 +61,28 @@ func main() {
 	var wg sync.WaitGroup
 	go func() {
 		wg.Add(1)
-		proc(chl, *gword, *casesens, &wg)
+		proc(chl, []byte(*gword), *casesens, &wg)
 	}()
 
 	breader := bufio.NewReader(g)
 	for {
 		line, err := breader.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				close(chl)
-				break
-			}
-			if err == io.ErrUnexpectedEOF {
-				close(chl)
-				break
-			}
-			log.Println(err)
+		if err == nil {
+			chl <- line
 			continue
 		}
-		chl <- line
+
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			close(chl)
+			break
+		}
+
+		log.Println(err)
 	}
 	wg.Wait()
 }
 
-func proc(in chan []byte, w string, c bool, wg *sync.WaitGroup) {
+func proc(in chan []byte, w []byte, c bool, wg *sync.WaitGroup) {
 	for line := range in {
 		var resp Response
 		if err := json.Unmarshal(line, &resp); err != nil {
@@ -98,7 +96,7 @@ func proc(in chan []byte, w string, c bool, wg *sync.WaitGroup) {
 			continue
 		}
 
-		if !contains(string(data), w, c) {
+		if !contains(data, w, c) {
 			continue
 		}
 
@@ -115,17 +113,17 @@ func proc(in chan []byte, w string, c bool, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func contains(s string, w string, c bool) bool {
+func contains(s []byte, w []byte, c bool) bool {
 	switch c {
-	case false:
+	case true:
 		m := search.New(language.English, search.IgnoreCase)
-		start, _ := m.IndexString(s, w)
+		start, _ := m.IndexString(string(s), string(w))
 		if start != -1 {
 			return true
 		}
 		return false
 
 	default:
-		return strings.Contains(s, w)
+		return bytes.Contains(s, w)
 	}
 }
