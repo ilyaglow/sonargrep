@@ -6,6 +6,7 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -26,7 +27,7 @@ type record struct {
 	DestinationPort int
 	IPID            int
 	TTL             int
-	Data            string
+	Data            []byte
 }
 
 func unmarshal(s string) (*record, error) {
@@ -42,22 +43,27 @@ func unmarshal(s string) (*record, error) {
 
 	sp, err := strconv.Atoi(tokens[2])
 	if err != nil {
-		return nil, fmt.Errorf("invalid source port fromat: %s", tokens[2])
+		return nil, fmt.Errorf("invalid source port format: %s", tokens[2])
 	}
 
 	dp, err := strconv.Atoi(tokens[4])
 	if err != nil {
-		return nil, fmt.Errorf("invalid destination port fromat: %s", tokens[4])
+		return nil, fmt.Errorf("invalid destination port format: %s", tokens[4])
 	}
 
 	ipid, err := strconv.Atoi(tokens[5])
 	if err != nil {
-		return nil, fmt.Errorf("invalid ipid fromat: %s", tokens[5])
+		return nil, fmt.Errorf("invalid ipid format: %s", tokens[5])
 	}
 
 	ttl, err := strconv.Atoi(tokens[6])
 	if err != nil {
-		return nil, fmt.Errorf("invalid ttl fromat: %s", tokens[6])
+		return nil, fmt.Errorf("invalid ttl format: %s", tokens[6])
+	}
+
+	data, err := hex.DecodeString(tokens[7])
+	if err != nil && !strings.Contains(err.Error(), "invalid byte") {
+		return nil, fmt.Errorf("invalid data format: %s", tokens[7])
 	}
 
 	return &record{
@@ -68,7 +74,7 @@ func unmarshal(s string) (*record, error) {
 		DestinationPort: dp,
 		IPID:            ipid,
 		TTL:             ttl,
-		Data:            tokens[7],
+		Data:            data,
 	}, nil
 }
 
@@ -121,6 +127,11 @@ func main() {
 	}()
 
 	breader := bufio.NewReader(g)
+	// Read header
+	if _, err := breader.ReadString('\n'); err != nil {
+		log.Fatal(err)
+	}
+
 	for {
 		line, err := breader.ReadString('\n')
 		if err == nil {
@@ -139,14 +150,19 @@ func main() {
 }
 
 func dump(r *record) {
-	log.Printf("%v\n", r)
+	fmt.Printf("%v\n", r)
 }
 
 func proc(in chan string, ss []*net.IPNet, wg *sync.WaitGroup) {
 	for line := range in {
 		r, err := unmarshal(line)
 		if err != nil {
-			log.Printf("wrong entry: %s", line)
+			log.Println(err)
+			continue
+		}
+
+		if len(ss) == 0 {
+			dump(r)
 			continue
 		}
 
